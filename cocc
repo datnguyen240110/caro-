@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cờ Caro XO Vô Hạn</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            touch-action: manipulation;
+        }
+        .canvas-container {
+            cursor: grab;
+        }
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col overflow-hidden antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- ULTRA-COMPACT HEADER TOOLBAR -->
+    <header class="bg-slate-900/95 backdrop-blur-md border-b border-slate-800/80 px-2 sm:px-4 py-1.5 flex items-center justify-between shrink-0 z-30 h-12 shadow-md">
+        
+        <!-- Left: Logo & Core Mode Toggle -->
+        <div class="flex items-center gap-2">
+            <!-- Brand Badge -->
+            <div class="flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 px-2 py-1 rounded-lg text-white font-black text-sm shadow-sm">
+                <span>XO</span>
+            </div>
+
+            <!-- Mode Selector Buttons (Icon Only on Mobile) -->
+            <div class="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                <button id="btn-mode-pvp" onclick="setGameMode('pvp')" class="px-2 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 bg-indigo-600 text-white shadow-sm" title="Người vs Người">
+                    <i class="fa-solid fa-user-group text-[11px]"></i>
+                    <span class="hidden sm:inline">PvP</span>
+                </button>
+                <button id="btn-mode-ai" onclick="setGameMode('ai')" class="px-2 py-1 rounded-md text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1" title="Đấu Với Máy">
+                    <i class="fa-solid fa-robot text-[11px]"></i>
+                    <span class="hidden sm:inline">PvAI</span>
+                </button>
+            </div>
+
+            <!-- AI Settings Dropdown Menu (Only in AI mode) -->
+            <div id="ai-settings-dropdown" class="relative hidden">
+                <button onclick="toggleAiMenu()" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 flex items-center gap-1 transition">
+                    <span id="ai-diff-label">⚡ Vừa</span>
+                    <i class="fa-solid fa-chevron-down text-[9px]"></i>
+                </button>
+
+                <!-- Floating Dropdown -->
+                <div id="ai-menu-popover" class="hidden absolute top-full left-0 mt-1.5 w-36 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1.5 text-xs">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Độ Khó AI:</div>
+                    <button onclick="setAIDifficulty('easy')" class="w-full text-left px-2 py-1 rounded hover:bg-slate-800 text-slate-300">🌱 Dễ</button>
+                    <button onclick="setAIDifficulty('medium')" class="w-full text-left px-2 py-1 rounded hover:bg-slate-800 text-amber-400 font-bold">⚡ Vừa</button>
+                    <button onclick="setAIDifficulty('hard')" class="w-full text-left px-2 py-1 rounded hover:bg-slate-800 text-rose-400 font-bold">🔥 Khó</button>
+                    
+                    <div class="border-t border-slate-800 my-0.5"></div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Lượt bạn chọn:</div>
+                    <div class="flex items-center gap-1">
+                        <button id="choose-x" onclick="setUserSide('X')" class="flex-1 py-0.5 text-center font-black rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">X</button>
+                        <button id="choose-o" onclick="setUserSide('O')" class="flex-1 py-0.5 text-center font-black rounded text-slate-400 hover:text-cyan-400">O</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rule Switch Icon Button -->
+            <button onclick="toggleRuleBlockEnds()" id="btn-rule-toggle" class="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 transition" title="Bật/Tắt Luật Chặn 2 Đầu">
+                <i class="fa-solid fa-shield-halved text-[11px]"></i>
+                <span class="hidden md:inline">Chặn 2 Đầu: Bật</span>
+            </button>
+        </div>
+
+        <!-- Center: Turn Status & Live Scores -->
+        <div class="flex items-center gap-2">
+            <!-- Current Turn Pill -->
+            <div id="turn-badge" class="px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-black flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                <span id="turn-text">X Lượt</span>
+            </div>
+
+            <!-- Score / Win Rate -->
+            <div class="hidden sm:flex items-center gap-2 text-xs font-bold bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                <span class="text-rose-400">X: <span id="score-x">0</span></span>
+                <span class="text-slate-600">|</span>
+                <span class="text-cyan-400">O: <span id="score-o">0</span></span>
+                <span class="text-slate-600">|</span>
+                <span class="text-emerald-400"><span id="score-winrate">100.0%</span></span>
+            </div>
+        </div>
+
+        <!-- Right: Actions & Profile -->
+        <div class="flex items-center gap-1.5">
+            <!-- Quick Gameplay Actions -->
+            <button onclick="undoMove()" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg flex items-center justify-center text-xs transition" title="Đi Lại (Undo)">
+                <i class="fa-solid fa-rotate-left"></i>
+            </button>
+
+            <button onclick="recenterBoard()" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg flex items-center justify-center text-xs transition" title="Căn Giữa">
+                <i class="fa-solid fa-crosshairs text-indigo-400"></i>
+            </button>
+
+            <button onclick="resetGame()" class="w-7 h-7 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg flex items-center justify-center text-xs transition" title="Ván Mới">
+                <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+
+            <div class="w-px h-5 bg-slate-800 mx-0.5"></div>
+
+            <!-- User Database / Profile Icons -->
+            <button onclick="openDatabaseModal()" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-lg flex items-center justify-center text-xs border border-slate-700 transition" title="Kho Dữ Liệu Cá Nhân">
+                <i class="fa-solid fa-database"></i>
+            </button>
+
+            <button id="btn-open-login" onclick="openAuthModal()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
+                <i class="fa-solid fa-user"></i>
+                <span class="hidden md:inline">Đăng Nhập</span>
+            </button>
+
+            <div id="user-profile-badge" class="hidden items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-2 py-0.5 cursor-pointer" onclick="openPublicAccountsModal()">
+                <img id="user-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=Guest" class="w-5 h-5 rounded-md bg-indigo-950" alt="Avatar">
+                <span id="user-display-name" class="text-xs font-bold text-slate-200 max-w-[60px] truncate hidden md:inline">Khách</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- FULLSCREEN GAME CANVAS AREA -->
+    <main class="relative flex-1 w-full h-full bg-slate-950 overflow-hidden canvas-container">
+        <canvas id="caroCanvas" class="w-full h-full block"></canvas>
+
+        <!-- Floating Minimal Help Text -->
+        <div class="absolute bottom-2 left-3 bg-slate-900/80 backdrop-blur-sm px-2.5 py-1 rounded-md border border-slate-800/80 text-[10px] text-slate-400 pointer-events-none flex items-center gap-1.5">
+            <i class="fa-solid fa-hand-pointer text-indigo-400"></i>
+            <span>Chạm/Giữ kéo bàn cờ • Cuộn chuột Phóng to/Thu nhỏ</span>
+        </div>
+
+        <!-- AI Thinking Indicator -->
+        <div id="ai-thinking-overlay" class="hidden absolute top-3 right-3 bg-slate-900/90 border border-indigo-500/40 text-indigo-300 text-xs font-semibold px-3 py-1 rounded-lg shadow-lg flex items-center gap-2 animate-bounce z-20">
+            <i class="fa-solid fa-spinner fa-spin text-indigo-400"></i>
+            <span>Máy đang tính...</span>
+        </div>
+    </main>
+
+    <!-- MODAL: Winner Announcement -->
+    <div id="modal-winner" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-xs w-full text-center shadow-2xl">
+            <div class="w-14 h-14 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600 text-white text-2xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-amber-500/20">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h3 id="winner-title" class="text-lg font-black text-white mb-1">X Thắng Ván Đấu!</h3>
+            <p id="winner-desc" class="text-xs text-slate-400 mb-4">Đã nối thành công chuỗi 5 quân liên tiếp!</p>
+            
+            <div class="flex items-center gap-2">
+                <button onclick="closeWinnerModal(); resetGame();" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition">
+                    Chơi Ván Mới
+                </button>
+                <button onclick="closeWinnerModal()" class="px-3 py-2 bg-slate-800 text-slate-300 font-semibold text-xs rounded-xl transition">
+                    Xem Bàn Cờ
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Auth -->
+    <div id="modal-auth" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-sm w-full shadow-2xl relative">
+            <button onclick="closeAuthModal()" class="absolute top-3 right-3 text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+            <h2 class="text-base font-bold text-white mb-1">Đăng Nhập Tài Khoản</h2>
+            <p class="text-xs text-slate-400 mb-3">Lưu lịch sử và đồng bộ dữ liệu chơi lên Cloud.</p>
+
+            <div class="space-y-2.5">
+                <input type="email" id="auth-email" placeholder="Email" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <input type="password" id="auth-password" placeholder="Mật khẩu" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                
+                <div id="auth-error-msg" class="text-[11px] text-rose-400 hidden"></div>
+
+                <div class="flex gap-2">
+                    <button onclick="handleEmailLogin()" class="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg transition">Đăng Nhập</button>
+                    <button onclick="handleEmailRegister()" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-lg transition">Đăng Ký</button>
+                </div>
+                <button onclick="handleGuestLogin()" class="w-full py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-400 text-xs rounded-lg border border-slate-800 transition">Chơi Nhanh (Khách)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Custom Database -->
+    <div id="modal-db" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-md w-full shadow-2xl flex flex-col max-h-[80vh] relative">
+            <button onclick="closeDatabaseModal()" class="absolute top-3 right-3 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            <h2 class="text-base font-bold text-white mb-1"><i class="fa-solid fa-database text-indigo-400 mr-1.5"></i> Kho Dữ Liệu Cá Nhân</h2>
+            
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 my-2 space-y-2">
+                <input type="text" id="db-title" placeholder="Tiêu đề..." class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white">
+                <textarea id="db-content" rows="2" placeholder="Nội dung ghi chú..." class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white resize-none"></textarea>
+                <button onclick="saveCustomDataRecord()" class="w-full py-1 bg-indigo-600 text-white font-bold text-xs rounded-lg">Lưu Dữ Liệu</button>
+            </div>
+            <div class="flex-1 overflow-y-auto space-y-1.5 pr-1" id="db-records-list"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: Public Accounts -->
+    <div id="modal-public-accounts" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-sm w-full shadow-2xl flex flex-col max-h-[80vh] relative">
+            <button onclick="closePublicAccountsModal()" class="absolute top-3 right-3 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            <h2 class="text-base font-bold text-white mb-2"><i class="fa-solid fa-users text-indigo-400 mr-1.5"></i> Danh Sách Tài Khoản</h2>
+            <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="public-accounts-list"></div>
+        </div>
+    </div>
+
+    <!-- APPLICATION JAVASCRIPT CODE -->
+    <script>
+        // Firebase Setup
+        const firebaseConfig = {
+            apiKey: "AIzaSyDummyKeyForFallbackPurpose12345",
+            authDomain: "caro-game-app.firebaseapp.com",
+            projectId: "caro-game-app"
+        };
+
+        let db = null, auth = null, currentUser = null;
+        try {
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+            db = firebase.firestore();
+        } catch (e) { console.warn("Firebase Fallback", e); }
+
+        const APP_ID = "xo_infinite_app";
+
+        // Game State Variables
+        let board = {}; 
+        let moveHistory = []; 
+        let currentTurn = 'X';
+        let gameMode = 'pvp'; 
+        let aiDifficulty = 'medium'; 
+        let userSide = 'X'; 
+        let ruleBlockEnds = true; 
+        let isGameOver = false;
+        let winningLine = null; 
+
+        let stats = { wins: 0, losses: 0, draws: 0, totalGames: 0 };
+
+        // Canvas Scale & Viewport Offset
+        const CELL_SIZE = 34;
+        let scale = 1.0, offsetX = 0, offsetY = 0;
+        let isDragging = false, hasDragged = false, startX = 0, startY = 0;
+
+        const canvas = document.getElementById('caroCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            drawBoard();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function recenterBoard() {
+            if (moveHistory.length > 0) {
+                const last = moveHistory[moveHistory.length - 1];
+                offsetX = canvas.width / 2 - last.x * CELL_SIZE * scale;
+                offsetY = canvas.height / 2 - last.y * CELL_SIZE * scale;
+            } else {
+                offsetX = canvas.width / 2;
+                offsetY = canvas.height / 2;
+            }
+            drawBoard();
+        }
+
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const size = CELL_SIZE * scale;
+
+            const startCol = Math.floor(-offsetX / size) - 1;
+            const endCol = Math.ceil((canvas.width - offsetX) / size) + 1;
+            const startRow = Math.floor(-offsetY / size) - 1;
+            const endRow = Math.ceil((canvas.height - offsetY) / size) + 1;
+
+            // Draw Grid
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let col = startCol; col <= endCol; col++) {
+                const x = col * size + offsetX;
+                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+            }
+            for (let row = startRow; row <= endRow; row++) {
+                const y = row * size + offsetY;
+                ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+            }
+            ctx.stroke();
+
+            // Center Dot
+            ctx.fillStyle = '#6366f1';
+            ctx.beginPath();
+            ctx.arc(offsetX, offsetY, 3 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Pieces
+            for (const key in board) {
+                const [gx, gy] = key.split(',').map(Number);
+                const px = gx * size + offsetX;
+                const py = gy * size + offsetY;
+
+                if (px + size >= 0 && px <= canvas.width && py + size >= 0 && py <= canvas.height) {
+                    const symbol = board[key];
+                    const pad = size * 0.22;
+                    ctx.lineWidth = Math.max(2, 3 * scale);
+                    ctx.lineCap = 'round';
+
+                    if (symbol === 'X') {
+                        ctx.strokeStyle = '#f43f5e';
+                        ctx.beginPath();
+                        ctx.moveTo(px + pad, py + pad); ctx.lineTo(px + size - pad, py + size - pad);
+                        ctx.moveTo(px + size - pad, py + pad); ctx.lineTo(px + pad, py + size - pad);
+                        ctx.stroke();
+                    } else {
+                        ctx.strokeStyle = '#06b6d4';
+                        ctx.beginPath();
+                        ctx.arc(px + size / 2, py + size / 2, (size / 2) - pad, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Highlight Last Move
+            if (moveHistory.length > 0) {
+                const last = moveHistory[moveHistory.length - 1];
+                const lx = last.x * size + offsetX;
+                const ly = last.y * size + offsetY;
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(lx + 2, ly + 2, size - 4, size - 4);
+            }
+
+            // Winning Line
+            if (winningLine && winningLine.length > 0) {
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 4 * scale;
+                ctx.beginPath();
+                const f = winningLine[0], l = winningLine[winningLine.length - 1];
+                ctx.moveTo(f.x * size + offsetX + size / 2, f.y * size + offsetY + size / 2);
+                ctx.lineTo(l.x * size + offsetX + size / 2, l.y * size + offsetY + size / 2);
+                ctx.stroke();
+            }
+        }
+
+        // Mouse/Touch Canvas Interactions
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true; hasDragged = false;
+            startX = e.clientX - offsetX; startY = e.clientY - offsetY;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const nx = e.clientX - startX, ny = e.clientY - startY;
+                if (Math.abs(nx - offsetX) > 3 || Math.abs(ny - offsetY) > 3) hasDragged = true;
+                offsetX = nx; offsetY = ny;
+                drawBoard();
+            }
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const factor = e.deltaY < 0 ? 1.1 : 0.9;
+            const ns = scale * factor;
+            if (ns >= 0.4 && ns <= 2.5) {
+                const cx = canvas.width / 2, cy = canvas.height / 2;
+                offsetX = cx - (cx - offsetX) * factor;
+                offsetY = cy - (cy - offsetY) * factor;
+                scale = ns;
+                drawBoard();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('click', (e) => {
+            if (hasDragged || isGameOver) return;
+            if (gameMode === 'ai' && currentTurn !== userSide) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const size = CELL_SIZE * scale;
+            const gx = Math.floor((e.clientX - rect.left - offsetX) / size);
+            const gy = Math.floor((e.clientY - rect.top - offsetY) / size);
+
+            makeMove(gx, gy);
+        });
+
+        function makeMove(x, y) {
+            const key = `${x},${y}`;
+            if (board[key] || isGameOver) return;
+
+            board[key] = currentTurn;
+            moveHistory.push({ x, y, player: currentTurn });
+
+            const winResult = checkWin(x, y, currentTurn);
+            if (winResult) {
+                isGameOver = true;
+                winningLine = winResult.line;
+                drawBoard();
+                handleGameEnd(currentTurn);
+                return;
+            }
+
+            currentTurn = currentTurn === 'X' ? 'O' : 'X';
+            updateUI();
+            drawBoard();
+
+            if (gameMode === 'ai' && currentTurn !== userSide && !isGameOver) {
+                document.getElementById('ai-thinking-overlay').classList.remove('hidden');
+                setTimeout(() => {
+                    executeAIMove();
+                    document.getElementById('ai-thinking-overlay').classList.add('hidden');
+                }, 300);
+            }
+        }
+
+        function checkWin(x, y, player) {
+            const dirs = [[{x:1,y:0}], [{x:0,y:1}], [{x:1,y:1}], [{x:1,y:-1}]];
+            for (const dir of dirs) {
+                const dx = dir[0].x, dy = dir[0].y;
+                let line = [{x, y}], count = 1, step = 1;
+
+                while (board[`${x + dx * step},${y + dy * step}`] === player) {
+                    line.push({x: x + dx * step, y: y + dy * step}); count++; step++;
+                }
+                const e1Blocked = board[`${x + dx * step},${y + dy * step}`] && board[`${x + dx * step},${y + dy * step}`] !== player;
+
+                step = 1;
+                while (board[`${x - dx * step},${y - dy * step}`] === player) {
+                    line.unshift({x: x - dx * step, y: y - dy * step}); count++; step++;
+                }
+                const e2Blocked = board[`${x - dx * step},${y - dy * step}`] && board[`${x - dx * step},${y - dy * step}`] !== player;
+
+                if (count >= 5) {
+                    if (ruleBlockEnds && e1Blocked && e2Blocked) continue;
+                    return { winner: player, line };
+                }
+            }
+            return null;
+        }
+
+        function undoMove() {
+            if (moveHistory.length === 0 || isGameOver) return;
+            if (gameMode === 'ai') {
+                for (let i = 0; i < 2; i++) {
+                    if (moveHistory.length > 0) {
+                        const last = moveHistory.pop();
+                        delete board[`${last.x},${last.y}`];
+                    }
+                }
+                currentTurn = userSide;
+            } else {
+                const last = moveHistory.pop();
+                delete board[`${last.x},${last.y}`];
+                currentTurn = last.player;
+            }
+            winningLine = null; isGameOver = false;
+            updateUI(); drawBoard();
+        }
+
+        function resetGame() {
+            board = {}; moveHistory = []; isGameOver = false; winningLine = null;
+            currentTurn = 'X';
+            if (gameMode === 'ai' && userSide === 'O') setTimeout(executeAIMove, 300);
+            recenterBoard(); updateUI(); drawBoard();
+        }
+
+        // Basic AI Mechanics
+        function executeAIMove() {
+            if (isGameOver) return;
+            const aiPlayer = userSide === 'X' ? 'O' : 'X';
+            const candidates = getCandidateMoves();
+            if (candidates.length === 0) { makeMove(0, 0); return; }
+
+            let bestScore = -Infinity, bestMove = candidates[0];
+            for (const move of candidates) {
+                board[`${move.x},${move.y}`] = aiPlayer;
+                const off = evalPoint(move.x, move.y, aiPlayer);
+                board[`${move.x},${move.y}`] = userSide;
+                const def = evalPoint(move.x, move.y, userSide);
+                delete board[`${move.x},${move.y}`];
+
+                const score = off + def * (aiDifficulty === 'hard' ? 1.3 : 0.9);
+                if (score > bestScore) { bestScore = score; bestMove = move; }
+            }
+            makeMove(bestMove.x, bestMove.y);
+        }
+
+        function getCandidateMoves() {
+            const set = new Set();
+            for (const k in board) {
+                const [x, y] = k.split(',').map(Number);
+                for (let dx = -2; dx <= 2; dx++) {
+                    for (let dy = -2; dy <= 2; dy++) {
+                        if (!board[`${x + dx},${y + dy}`]) set.add(`${x + dx},${y + dy}`);
+                    }
+                }
+            }
+            return Array.from(set).map(k => { const [x, y] = k.split(',').map(Number); return { x, y }; });
+        }
+
+        function evalPoint(x, y, p) {
+            let total = 0;
+            const dirs = [{x:1,y:0}, {x:0,y:1}, {x:1,y:1}, {x:1,y:-1}];
+            for (const d of dirs) {
+                let c = 1, step = 1;
+                while (board[`${x + d.x * step},${y + d.y * step}`] === p) { c++; step++; }
+                step = 1;
+                while (board[`${x - d.x * step},${y - d.y * step}`] === p) { c++; step++; }
+                if (c >= 5) total += 10000;
+                else if (c === 4) total += 1000;
+                else if (c === 3) total += 100;
+            }
+            return total;
+        }
+
+        // UI Updates
+        function setGameMode(mode) {
+            gameMode = mode;
+            document.getElementById('btn-mode-pvp').className = mode === 'pvp'
+                ? "px-2 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 bg-indigo-600 text-white shadow-sm"
+                : "px-2 py-1 rounded-md text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1";
+
+            document.getElementById('btn-mode-ai').className = mode === 'ai'
+                ? "px-2 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 bg-indigo-600 text-white shadow-sm"
+                : "px-2 py-1 rounded-md text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1";
+
+            document.getElementById('ai-settings-dropdown').style.display = mode === 'ai' ? 'block' : 'none';
+            resetGame();
+        }
+
+        function toggleAiMenu() {
+            document.getElementById('ai-menu-popover').classList.toggle('hidden');
+        }
+
+        function setAIDifficulty(diff) {
+            aiDifficulty = diff;
+            const labels = { easy: '🌱 Dễ', medium: '⚡ Vừa', hard: '🔥 Khó' };
+            document.getElementById('ai-diff-label').innerText = labels[diff];
+            toggleAiMenu();
+        }
+
+        function setUserSide(side) {
+            userSide = side;
+            document.getElementById('choose-x').className = side === 'X'
+                ? "flex-1 py-0.5 text-center font-black rounded bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                : "flex-1 py-0.5 text-center font-black rounded text-slate-400 hover:text-rose-400";
+
+            document.getElementById('choose-o').className = side === 'O'
+                ? "flex-1 py-0.5 text-center font-black rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                : "flex-1 py-0.5 text-center font-black rounded text-slate-400 hover:text-cyan-400";
+            resetGame();
+        }
+
+        function toggleRuleBlockEnds() {
+            ruleBlockEnds = !ruleBlockEnds;
+            const btn = document.getElementById('btn-rule-toggle');
+            if (ruleBlockEnds) {
+                btn.className = "px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 transition";
+                btn.innerHTML = `<i class="fa-solid fa-shield-halved text-[11px]"></i><span class="hidden md:inline">Chặn 2 Đầu: Bật</span>`;
+            } else {
+                btn.className = "px-2 py-1 bg-slate-800 text-slate-400 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition";
+                btn.innerHTML = `<i class="fa-solid fa-shield-halved text-[11px]"></i><span class="hidden md:inline">Chặn 2 Đầu: Tắt</span>`;
+            }
+        }
+
+        function updateUI() {
+            const turnBadge = document.getElementById('turn-badge');
+            const turnText = document.getElementById('turn-text');
+            if (currentTurn === 'X') {
+                turnBadge.className = "px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-black flex items-center gap-1";
+                turnText.innerText = "X Lượt";
+            } else {
+                turnBadge.className = "px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-black flex items-center gap-1";
+                turnText.innerText = "O Lượt";
+            }
+            document.getElementById('score-x').innerText = stats.wins;
+            document.getElementById('score-o').innerText = stats.losses;
+            document.getElementById('score-winrate').innerText = stats.totalGames === 0 ? "100.0%" : ((stats.wins / stats.totalGames) * 100).toFixed(1) + "%";
+        }
+
+        function handleGameEnd(winner) {
+            stats.totalGames++;
+            if (winner === userSide) stats.wins++; else stats.losses++;
+            updateUI();
+            document.getElementById('winner-title').innerText = `${winner} Thắng Ván Đấu!`;
+            openWinnerModal();
+        }
+
+        // Modal Helpers
+        function openWinnerModal() { document.getElementById('modal-winner').classList.remove('hidden'); }
+        function closeWinnerModal() { document.getElementById('modal-winner').classList.add('hidden'); }
+        function openAuthModal() { document.getElementById('modal-auth').classList.remove('hidden'); }
+        function closeAuthModal() { document.getElementById('modal-auth').classList.add('hidden'); }
+        function openDatabaseModal() { document.getElementById('modal-db').classList.remove('hidden'); }
+        function closeDatabaseModal() { document.getElementById('modal-db').classList.add('hidden'); }
+        function openPublicAccountsModal() { document.getElementById('modal-public-accounts').classList.remove('hidden'); }
+        function closePublicAccountsModal() { document.getElementById('modal-public-accounts').classList.add('hidden'); }
+
+        function handleGuestLogin() {
+            if (auth) auth.signInAnonymously().then(() => closeAuthModal());
+        }
+
+        // Init App
+        resizeCanvas();
+        recenterBoard();
+        updateUI();
+    </script>
+</body>
+</html>
